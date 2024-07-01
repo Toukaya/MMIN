@@ -80,8 +80,8 @@ class BaseModel(ABC):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         if self.isTrain:
-            self.schedulers = [tools.get_scheduler(optimizer, opt) for optimizer in self.optimizers]
-            for name in self.model_names:
+            self.schedulers = [tools.get_scheduler(optimizer, opt) for optimizer in self.optimizers] # Adam
+            for name in self.model_names: # mmin: ['A', 'V', 'L', 'C', 'AE', 'AE_cycle'] ## fully: ['C', 'A', 'L', 'V']
                 net = getattr(self, 'net' + name)
                 net = tools.init_net(net, opt.init_type, opt.init_gain, opt.gpu_ids)
                 setattr(self, 'net' + name, net)
@@ -101,7 +101,7 @@ class BaseModel(ABC):
     def eval(self):
         """Make models eval mode during test time"""
         self.isTrain = False
-        for name in self.model_names:
+        for name in self.model_names: # ['A', 'V', 'L', 'C']
             if isinstance(name, str):
                 net = getattr(self, 'net' + name)
                 net.eval()
@@ -150,7 +150,7 @@ class BaseModel(ABC):
     def get_current_losses(self):
         """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
         errors_ret = OrderedDict()
-        for name in self.loss_names:
+        for name in self.loss_names: # ['CE', 'mse', 'cycle']
             if isinstance(name, str):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
         return errors_ret

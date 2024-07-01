@@ -4,6 +4,81 @@ import random
 import copy
 import torch.nn.functional as F
 
+class BaseAutoencoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU()
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(32, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        latent_vector = self.encoder(x)
+        reconstructed = self.decoder(latent_vector)
+        return reconstructed, latent_vector
+
+
+class LSTMAutoencoder(nn.Module):
+    ''' Conditioned LSTM autoencoder
+    '''
+    def __init__(self, opt):
+        super().__init__()
+        self.input_size = opt.input_size
+        self.hidden_size = opt.hidden_size
+        self.embedding_size = opt.embedding_size
+        self.false_teacher_rate = opt.false_teacher_rate # use the label instead of the output of previous time step
+        super().__init__()
+        self.encoder = nn.LSTMCell(self.input_size, self.hidden_size)
+        self.enc_fc = nn.Linear(self.hidden_size, self.embedding_size)
+        self.decoder = nn.LSTMCell(self.hidden_size + self.input_size, self.input_size)
+        self.dec_fc = nn.Linear(self.embedding_size, self.hidden_size)
+        self.relu = nn.ReLU()
+    
+    def forward(self, x):
+        ''' x.size() = [batch, timestamp, dim]
+        '''
+        # timestamp_size = x.size(1)
+        # inverse_range = range(timestamp_size-1, -1, -1)
+        # inverse_x = x[:, inverse_range, :]
+        outputs = []
+        o_t_enc = torch.zeros(x.size(0), self.hidden_size).cuda()
+        h_t_enc = torch.zeros(x.size(0), self.hidden_size).cuda()
+        o_t_dec = torch.zeros(x.size(0), self.input_size).cuda()
+        h_t_dec = torch.zeros(x.size(0), self.input_size).cuda()
+
+        for i, input_t in enumerate(x.chunk(x.size(1), dim=1)):
+            input_t = input_t.squeeze(1)
+            o_t_enc, h_t_enc = self.encoder(input_t, (o_t_enc, h_t_enc))
+
+        embd = self.relu(self.enc_fc(h_t_enc))
+        dec_first_hidden = self.relu(self.dec_fc(embd))
+        dec_first_zeros = torch.zeros(x.size(0), self.input_size).cuda()
+        dec_input = torch.cat((dec_first_hidden, dec_first_zeros), dim=1)
+
+        for i in range(x.size(1)):
+            o_t_dec, h_t_dec = self.decoder(dec_input, (o_t_dec, h_t_dec))
+            if self.training and random.random() < self.false_teacher_rate:
+                dec_input = torch.cat((dec_first_hidden, x[:, -i-1, :]), dim=1)
+            else:
+                dec_input = torch.cat((dec_first_hidden, h_t_dec), dim=1)
+            outputs.append(h_t_dec)
+        
+        outputs.reverse()
+        outputs = torch.stack(outputs, 1)
+        # print(outputs.shape)
+        return outputs, embd
+
+
+
+
 class ResidualAE(nn.Module):
     ''' Residual autoencoder using fc layers
         layers should be something like [128, 64, 32]
@@ -48,7 +123,7 @@ class ResidualAE(nn.Module):
         decoder_layer.append(self.input_dim)
         for i in range(0, len(decoder_layer)-2):
             all_layers.append(nn.Linear(decoder_layer[i], decoder_layer[i+1]))
-            all_layers.append(nn.ReLU()) # LeakyReLU
+            all_layers.append(nn.ReLU())
             if self.use_bn:
                 all_layers.append(nn.BatchNorm1d(decoder_layer[i]))
             if self.dropout > 0:
@@ -71,6 +146,8 @@ class ResidualAE(nn.Module):
             latents.append(latent)
         latents = torch.cat(latents, dim=-1)
         return self.transition(x_in+x_out), latents
+
+
 
 class ResidualUnetAE(nn.Module):
     ''' Residual autoencoder using fc layers
@@ -106,7 +183,7 @@ class ResidualUnetAE(nn.Module):
         for i in range(0, len(layers)):
             layer = []
             layer.append(nn.Linear(input_dim, layers[i]))
-            layer.append(nn.LeakyReLU())
+            layer.append(nn.ReLU())
             if self.use_bn:
                 layer.append(nn.BatchNorm1d(layers[i]))
             if self.dropout > 0:
@@ -131,7 +208,7 @@ class ResidualUnetAE(nn.Module):
         for i in range(len(layers)-2, 0, -1):
             layer = []
             layer.append(nn.Linear(layers[i]*self.expand_num, layers[i-1]))
-            layer.append(nn.LeakyReLU())
+            layer.append(nn.ReLU())
             if self.use_bn:
                 layer.append(nn.BatchNorm1d(layers[i] * self.expand_num))
             if self.dropout > 0:
@@ -171,6 +248,10 @@ class ResidualUnetAE(nn.Module):
             x_out = decoder[i](x_in)
             x_in = x_out
         
+        # print(decoder[-1])
+        # print(x_in.shape)
+        # print(x_out.shape)
+        # x_out = decoder[-1](x_in)
         return x_out
     
     def forward(self, x):
@@ -211,6 +292,9 @@ class SimpleFcAE(nn.Module):
             if self.dropout > 0:
                 all_layers.append(nn.Dropout(self.dropout))
             input_dim = layers[i]
+        # delete the activation layer of the last layer
+        # decline_num = 1 + int(self.use_bn) + int(self.dropout > 0)
+        # all_layers = all_layers[:-decline_num]
         return nn.Sequential(*all_layers)
     
     def get_decoder(self, layers):

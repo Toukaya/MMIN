@@ -100,7 +100,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     Parameters:
         net (network)      -- the network to be initialized
         init_type (str)    -- the name of an initialization method: normal | xavier | kaiming | orthogonal
-        gain (float)       -- scaling factor for normal, xavier and orthogonal.
+        init_gain (float)  -- scaling factor for normal, xavier and orthogonal.
         gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
 
     Return an initialized network.

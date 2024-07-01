@@ -7,7 +7,7 @@ gpu=$3
 for i in `seq 1 1 10`;
 do
 
-cmd="python train_baseline.py --dataset_mode=multimodal --model=utt_fusion
+cmd="python3 train_baseline.py --dataset_mode=multimodal --model=utt_fusion
 --gpu_ids=$gpu --modality=$modality --corpus_name=IEMOCAP
 --log_dir=./logs --checkpoints_dir=./checkpoints --print_freq=10 
 --A_type=comparE --input_dim_a=130 --norm_method=trn --embd_size_a=128 --embd_method_a=maxpool
