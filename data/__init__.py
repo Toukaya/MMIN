@@ -28,8 +28,7 @@ def find_dataset_using_name(dataset_name):
     dataset = None
     target_dataset_name = dataset_name.replace('_', '') + 'dataset'
     for name, cls in datasetlib.__dict__.items():
-        if name.lower() == target_dataset_name.lower() \
-           and issubclass(cls, BaseDataset):
+        if name.lower() == target_dataset_name.lower() and issubclass(cls, BaseDataset):
             dataset = cls
 
     if dataset is None:
@@ -57,7 +56,7 @@ def create_dataset(opt):
     data_loader = CustomDatasetDataLoader(opt)
     return data_loader
 
-
+# opt, set_name=['trn', 'val', 'tst']
 def create_dataset_with_args(opt, **kwargs):
     """Create two dataloader given the option, dataset may have additional args.
     This function wraps the class CustomDatasetDataLoader.
@@ -70,32 +69,32 @@ def create_dataset_with_args(opt, **kwargs):
         eg: dataset.__init__(self, set_name='trn'): ....
     """
     _kwargs = []
-    for key in kwargs:
-        value = kwargs[key]
+    for key in kwargs: # 'set_name'
+        value = kwargs[key] # 'trn', 'val', 'tst'
         if not isinstance(value, (list, tuple)):
             value = [value]
-        lens = len(value)
+        lens = len(value) # lens = 3
         _kwargs += list(map(lambda x: {}, range(lens))) if len(_kwargs) == 0 else []
         for i, v in enumerate(value):
             _kwargs[i][key] = v 
-        
+    
+    # _kwargs: [{'set_name': 'trn'}, {'set_name': 'val'}, {'set_name': 'tst'}]    
     dataloaders = tuple(map(lambda x: CustomDatasetDataLoader(opt, **x), _kwargs))
     return dataloaders if len(dataloaders) > 1 else dataloaders[0]
 
 
 class CustomDatasetDataLoader():
     """Wrapper class of Dataset class that performs multi-threaded data loading"""
-
+    ## kwargs: [{'set_name': 'trn'}, {'set_name': 'val'}, {'set_name': 'tst'}]
     def __init__(self, opt, **kwargs):
         """Initialize this class
-
         Step 1: create a dataset instance given the name [dataset_mode]
         Step 2: create a multi-threaded data loader.
         """
         self.opt = opt
-        dataset_class = find_dataset_using_name(opt.dataset_mode)
+        dataset_class = find_dataset_using_name(opt.dataset_mode) # 'data.multimodal_dataset.MultimodalDataset'
         self.dataset = dataset_class(opt, **kwargs)
-        print("dataset [%s] was created" % type(self.dataset).__name__)
+        # print("dataset [%s] was created" % type(self.dataset).__name__)
         
         ''' Whether to use manual collate function defined in dataset.collate_fn'''
         if self.dataset.manual_collate_fn: 

@@ -1,66 +1,66 @@
 # MMIN
 
-This repo implements the Missing Modality Imagination Network(MMIN) for the following paper:
-"Missing Modality Imagination Network for Emotion Recognition with Uncertain Missing Modalities" 
+此代码库实现了缺失模态想象网络（MMIN），用于以下论文：
+"带有不确定缺失模态的情绪识别中的缺失模态想象网络"
 
-# Environment
+# 环境
 
-``` 
+```
 python 3.7.0
 pytorch >= 1.0.0
 ```
 
-# Usage
+# 使用方法
 
-First you should change the data folder path in ```data/config``` and preprocess your data follwing the code in ```preprocess/```.
+首先，您应该在`data/config`中更改数据文件夹路径，并按照`preprocess/`中的代码预处理您的数据。
 
-The preprocess of feature was done handcrafted in several steps, we will make it a automatical running script in the next update. You can download the preprocessed feature to run the code.
+特征的预处理是手工完成的，我们将在下一个更新中使其成为自动运行脚本。您可以下载预处理后的特征来运行代码。
 
-+ For Training MMIN on IEMOCAP:
++ 对IEMOCAP进行MMIN训练：
 
-    First training a model fusion model with all audio, visual and lexical modality as the pretrained encoder.
+    首先，使用所有音频、视觉和词汇模态训练一个模型融合模型作为预训练的编码器。
 
     ```bash
     bash scripts/CAP_utt_fusion.sh AVL [num_of_expr] [GPU_index]
     ```
 
-    Then
+    然后
 
     ```bash
     bash scripts/CAP_mmin.sh [num_of_expr] [GPU_index]
     ```
 
-+ For Training MMIN on MSP-improv: 
++ 对MSP-improv进行MMIN训练：
 
     ```bash
     bash scripts/MSP_utt_fusion.sh AVL [num_of_expr] [GPU_index]
     ```
 
-    ```
+    ```bash
     bash scripts/MSP_mmin.sh [num_of_expr] [GPU_index]
     ```
 
-Note that you can run the code with default hyper-parameters defined in shell scripts, for changing these arguments, please refer to options/get_opt.py and the ```modify_commandline_options``` method of each model you choose.
+请注意，您可以使用shell脚本中定义的默认超参数运行代码，如需更改这些参数，请参考`options/get_opt.py`和您选择的每个模型的`modify_commandline_options`方法。
 
-# Download the features
-Baidu Yun Link
-IEMOCAP A V L modality Features
-链接: https://pan.baidu.com/s/1WmuqNlvcs5XzLKfz5i4iqQ 提取码: gn6w 
+# 下载特征
+百度云链接
+IEMOCAP A V L模态特征
+链接：https://pan.baidu.com/s/1WmuqNlvcs5XzLKfz5i4iqQ 提取码：gn6w
 
-Google Drive Link
+Google Drive 链接
 https://drive.google.com/file/d/1X5wjY-eMnLPV2qkFaaRi9ZPkrMcCAv7Q/view?usp=sharing
 
-Baidu Yun Link
-MSP A V L modality Features
-链接: https://pan.baidu.com/s/17E44x84pdR2AQIts0aJfKg 提取码: 6dzq
+百度云链接
+MSP A V L模态特征
+链接：https://pan.baidu.com/s/17E44x84pdR2AQIts0aJfKg 提取码：6dzq
 
-# License
-MIT license. 
+# 许可证
+MIT许可证。
 
-Copyright (c) 2021 AIM3-RUC lab, School of Information, Renmin University of China.
+版权所有 (c) 2021 中国人民大学信息学院AIM3-RUC实验室。
 
-# Citation
-If you find our paper and this code usefull, please consider cite
+# 引用
+如果您发现我们的论文和此代码有用，请考虑引用
 ```
 @inproceedings{zhao2021missing,
   title={Missing modality imagination network for emotion recognition with uncertain missing modalities},

@@ -1,0 +1,6 @@
+{
+    "data_root": "/data6/lrc/MSP-IMPROV",
+    "target_root": "/home/touka/data/IEMOCAP/target",
+    "total_cv": 5,
+    "feature_root": "/home/touka/data/IEMOCAP/feature"
+}

@@ -1,3 +1,4 @@
+
 import torch
 import os
 import json
@@ -8,12 +9,12 @@ from models.networks.fc import FcEncoder
 from models.networks.lstm import LSTMEncoder
 from models.networks.textcnn import TextCNN
 from models.networks.classifier import FcClassifier
-from models.networks.autoencoder import ResidualAE
+from models.networks.autoencoder import ResidualAE_test
 from models.utt_fusion_model import UttFusionModel
 from .utils.config import OptConfig
 
 
-class MMINModel(BaseModel):
+class MMINAblationModel(BaseModel):
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
         parser.add_argument('--input_dim_a', type=int, default=130, help='acoustic input dim')
@@ -35,6 +36,7 @@ class MMINModel(BaseModel):
         parser.add_argument('--ce_weight', type=float, default=1.0, help='weight of ce loss')
         parser.add_argument('--mse_weight', type=float, default=1.0, help='weight of mse loss')
         parser.add_argument('--cycle_weight', type=float, default=1.0, help='weight of cycle loss')
+        parser.add_argument('--case', type=str, default='raw', help='weight of cycle loss')
         return parser
 
     def __init__(self, opt):
@@ -45,42 +47,26 @@ class MMINModel(BaseModel):
         super().__init__(opt)
         # our expriment is on 10 fold setting, teacher is on 5 fold setting, the train set should match
         self.loss_names = ['CE', 'mse', 'cycle']
-        self.model_names = ['A', 'V', 'L', 'C', 'AE', 'AE_cycle'] # name of each layer
-        cls_layers = list(map(lambda x: int(x), opt.cls_layers.split(',')))
-
+        self.model_names = ['A', 'V', 'L', 'C', 'AE', 'AE_cycle']
+        
         # acoustic model
-        #############################
-        # self.netA = LSTMEncoder(opt.input_dim_a, opt.embd_size_a, embd_method=opt.embd_method_a)
-        self.netA = FcClassifier(opt.input_dim_a, cls_layers, output_dim=opt.embd_size_a, dropout=opt.dropout_rate, use_bn=opt.bn)
-        #############################
-
+        self.netA = LSTMEncoder(opt.input_dim_a, opt.embd_size_a, embd_method=opt.embd_method_a)
         # lexical model
-        #############################
-        # self.netL = TextCNN(opt.input_dim_l, opt.embd_size_l)
-        self.netL = FcClassifier(opt.input_dim_l, cls_layers, output_dim=opt.embd_size_l, dropout=opt.dropout_rate, use_bn=opt.bn)
-        #############################
-
+        self.netL = TextCNN(opt.input_dim_l, opt.embd_size_l)
         # visual model
-        #############################
-        # self.netV = LSTMEncoder(opt.input_dim_v, opt.embd_size_v, embd_method=opt.embd_method_v)
-        self.netV = FcClassifier(opt.input_dim_v, cls_layers, output_dim=opt.embd_size_v, dropout=opt.dropout_rate, use_bn=opt.bn)
-        #############################
-
+        self.netV = LSTMEncoder(opt.input_dim_v, opt.embd_size_v, opt.embd_method_v)
         # AE model
         AE_layers = list(map(lambda x: int(x), opt.AE_layers.split(',')))
         AE_input_dim = opt.embd_size_a + opt.embd_size_v + opt.embd_size_l
-        self.netAE = ResidualAE(AE_layers, opt.n_blocks, AE_input_dim, dropout=0, use_bn=False)
-        self.netAE_cycle = ResidualAE(AE_layers, opt.n_blocks, AE_input_dim, dropout=0, use_bn=False)
+        self.netAE = ResidualAE_test(AE_layers, opt.n_blocks, AE_input_dim, dropout=0, use_bn=False, case=opt.case)
+        self.netAE_cycle = ResidualAE_test(AE_layers, opt.n_blocks, AE_input_dim, dropout=0, use_bn=False, case=opt.case)
+        cls_layers = list(map(lambda x: int(x), opt.cls_layers.split(',')))
         cls_input_size = AE_layers[-1] * opt.n_blocks
         self.netC = FcClassifier(cls_input_size, cls_layers, output_dim=opt.output_dim, dropout=opt.dropout_rate, use_bn=opt.bn)
 
         if self.isTrain:
             self.load_pretrained_encoder(opt)
-            #############################
-            dataset = opt.dataset_mode.split('_')[0]
-            if dataset in ['cmumosi', 'cmumosei']:   self.criterion_ce = torch.nn.MSELoss()
-            if dataset in ['boxoflies', 'iemocapfour', 'iemocapsix']: self.criterion_ce = torch.nn.CrossEntropyLoss()
-            #############################
+            self.criterion_ce = torch.nn.CrossEntropyLoss()
             self.criterion_mse = torch.nn.MSELoss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             paremeters = [{'params': getattr(self, 'net'+net).parameters()} for net in self.model_names]
@@ -131,64 +117,50 @@ class MMINModel(BaseModel):
         Parameters:
             input (dict): include the data itself and its metadata information.
         """
-        acoustic = input['A_feat'].float().to(self.device) # [256, 512]
-        lexical = input['L_feat'].float().to(self.device)  # [256, 1024]
-        visual = input['V_feat'].float().to(self.device)   # [256, 1024]
-        self.label = input['label'].to(self.device)    # [256]
-        self.missing_index = input['missing_index'].long().to(self.device) # [256, 3]
-        # A modality
-        #############################################
-        self.A_miss_index = self.missing_index[:, 0].unsqueeze(1) # [256, 1]
-        self.A_miss = acoustic * self.A_miss_index
-        self.A_reverse = acoustic * -1 * (self.A_miss_index - 1)
-        # L modality
-        self.L_miss_index = self.missing_index[:, 2].unsqueeze(1)
-        self.L_miss = lexical * self.L_miss_index
-        self.L_reverse = lexical * -1 * (self.L_miss_index - 1)
-        # V modality
-        self.V_miss_index = self.missing_index[:, 1].unsqueeze(1)
-        self.V_miss = visual * self.V_miss_index
-        self.V_reverse = visual * -1 * (self.V_miss_index - 1)
-        #############################################
-
+        acoustic = input['A_feat'].float().to(self.device)
+        lexical = input['L_feat'].float().to(self.device)
+        visual = input['V_feat'].float().to(self.device)
+        if self.isTrain:
+            self.label = input['label'].to(self.device)
+            self.missing_index = input['missing_index'].long().to(self.device)
+            # A modality
+            self.A_miss_index = self.missing_index[:, 0].unsqueeze(1).unsqueeze(2)
+            self.A_miss = acoustic * self.A_miss_index
+            self.A_reverse = acoustic * -1 * (self.A_miss_index - 1)
+            # L modality
+            self.L_miss_index = self.missing_index[:, 2].unsqueeze(1).unsqueeze(2)
+            self.L_miss = lexical * self.L_miss_index
+            self.L_reverse = lexical * -1 * (self.L_miss_index - 1)
+            # V modality
+            self.V_miss_index = self.missing_index[:, 1].unsqueeze(1).unsqueeze(2)
+            self.V_miss = visual * self.V_miss_index
+            self.V_reverse = visual * -1 * (self.V_miss_index - 1)
+        else:
+            self.A_miss = acoustic
+            self.V_miss = visual
+            self.L_miss = lexical
 
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         # get utt level representattion
-        ###############################################
-        self.feat_A_miss, _ = self.netA(self.A_miss)
-        self.feat_L_miss, _ = self.netL(self.L_miss)
-        self.feat_V_miss, _ = self.netV(self.V_miss)
-        # self.feat_A_miss = self.netA(self.A_miss)
-        # self.feat_L_miss = self.netL(self.L_miss)
-        # self.feat_V_miss = self.netV(self.V_miss)
-        ###############################################
+        self.feat_A_miss = self.netA(self.A_miss)
+        self.feat_L_miss = self.netL(self.L_miss)
+        self.feat_V_miss = self.netV(self.V_miss)
         # fusion miss
         self.feat_fusion_miss = torch.cat([self.feat_A_miss, self.feat_L_miss, self.feat_V_miss], dim=-1)
         # calc reconstruction of teacher's output
         self.recon_fusion, self.latent = self.netAE(self.feat_fusion_miss)
         self.recon_cycle, self.latent_cycle = self.netAE_cycle(self.recon_fusion)
         # get fusion outputs for missing modality
-        self.hiddens = self.latent
         self.logits, _ = self.netC(self.latent)
-        #############################
-        # self.pred = F.softmax(self.logits, dim=-1)
-        self.logits = self.logits.squeeze()
-        self.pred = self.logits
-        self.loss_recon = torch.zeros(1)
-        #############################
+        self.pred = F.softmax(self.logits, dim=-1)
         # for training 
         if self.isTrain:
             with torch.no_grad():
-                ###############################################
-                # self.T_embd_A = self.pretrained_encoder.netA(self.A_reverse)
-                # self.T_embd_L = self.pretrained_encoder.netL(self.L_reverse)
-                # self.T_embd_V = self.pretrained_encoder.netV(self.V_reverse)
-                self.T_embd_A, _ = self.pretrained_encoder.netA(self.A_reverse)
-                self.T_embd_L, _ = self.pretrained_encoder.netL(self.L_reverse)
-                self.T_embd_V, _ = self.pretrained_encoder.netV(self.V_reverse)
-                ###############################################
+                self.T_embd_A = self.pretrained_encoder.netA(self.A_reverse)
+                self.T_embd_L = self.pretrained_encoder.netL(self.L_reverse)
+                self.T_embd_V = self.pretrained_encoder.netV(self.V_reverse)
                 self.T_embds = torch.cat([self.T_embd_A, self.T_embd_L, self.T_embd_V], dim=-1)
         
     def backward(self):

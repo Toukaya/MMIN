@@ -8,12 +8,12 @@ from models.networks.fc import FcEncoder
 from models.networks.lstm import LSTMEncoder
 from models.networks.textcnn import TextCNN
 from models.networks.classifier import FcClassifier
-from models.networks.autoencoder import SimpleFcAE
+from models.networks.autoencoder import ResidualAE
 from models.utt_fusion_model import UttFusionModel
 from .utils.config import OptConfig
 
 
-class MMINAEModel(BaseModel):
+class MMINCRAModel(BaseModel):
     @staticmethod
     def modify_commandline_options(parser, is_train=True):
         parser.add_argument('--input_dim_a', type=int, default=130, help='acoustic input dim')
@@ -33,6 +33,7 @@ class MMINAEModel(BaseModel):
         parser.add_argument('--pretrained_path', type=str, help='where to load pretrained encoder network')
         parser.add_argument('--ce_weight', type=float, default=1.0, help='weight of ce loss')
         parser.add_argument('--mse_weight', type=float, default=1.0, help='weight of mse loss')
+        parser.add_argument('--n_blocks', type=int, default=3, help='number of AE blocks')
         return parser
 
     def __init__(self, opt):
@@ -61,8 +62,8 @@ class MMINAEModel(BaseModel):
 
         # AE model
         AE_layers = list(map(lambda x: int(x), opt.AE_layers.split(',')))
-        self.netAE = SimpleFcAE(AE_layers, AE_input_dim, dropout=0, use_bn=False)
-        # cls_input_size = AE_layers[-1]
+        self.netAE = ResidualAE(AE_layers, opt.n_blocks, AE_input_dim, dropout=0, use_bn=False)
+        # cls_input_size = AE_layers[-1] * opt.n_blocks
         self.netC = FcClassifier(AE_input_dim, cls_layers, output_dim=opt.output_dim, dropout=opt.dropout_rate, use_bn=opt.bn)
 
         if self.isTrain:
@@ -88,12 +89,13 @@ class MMINAEModel(BaseModel):
         acoustic = input['A_feat'].float().to(self.device)
         lexical = input['L_feat'].float().to(self.device)
         visual = input['V_feat'].float().to(self.device)
+
         self.label = input['label'].to(self.device)
         self.missing_index = input['missing_index'].long().to(self.device)
         # A modality
         self.A_miss_index = self.missing_index[:, 0].unsqueeze(1)
-        self.A_miss = acoustic * self.A_miss_index               # 1 (exist), 0 (miss)
-        self.A_reverse = acoustic * -1 * (self.A_miss_index - 1) # 0, 1
+        self.A_miss = acoustic * self.A_miss_index
+        self.A_reverse = acoustic * -1 * (self.A_miss_index - 1)
         self.A_full = acoustic
         # L modality
         self.L_miss_index = self.missing_index[:, 2].unsqueeze(1)
@@ -105,11 +107,12 @@ class MMINAEModel(BaseModel):
         self.V_miss = visual * self.V_miss_index
         self.V_reverse = visual * -1 * (self.V_miss_index - 1)
         self.V_full = visual
+        
 
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-
+        
         ## recon
         self.feat_A_miss, _ = self.netA(self.A_miss)
         self.feat_L_miss, _ = self.netL(self.L_miss)
@@ -126,7 +129,7 @@ class MMINAEModel(BaseModel):
         self.logits = self.logits.squeeze()
         self.pred = self.logits
 
-        ## calculate cls loss
+       ## calculate cls loss
         if self.dataset in ['cmumosi', 'cmumosei']:                    criterion_ce = torch.nn.MSELoss()
         if self.dataset in ['boxoflies', 'iemocapfour', 'iemocapsix']: criterion_ce = torch.nn.CrossEntropyLoss()
         self.loss_ce = criterion_ce(self.logits, self.label)
@@ -141,13 +144,14 @@ class MMINAEModel(BaseModel):
         self.loss_recon = loss_recon1 + loss_recon2 + loss_recon3
         ## merge all loss
         self.loss = self.ce_weight * self.loss_ce + self.mse_weight * self.loss_recon
-       
+
 
     def backward(self):
         """Calculate the loss for back propagation"""
         self.loss.backward()
         for model in self.model_names:
             torch.nn.utils.clip_grad_norm_(getattr(self, 'net'+model).parameters(), 5)
+
 
     def optimize_parameters(self, epoch):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""

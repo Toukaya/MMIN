@@ -6,7 +6,7 @@ gpu=$2
 for i in `seq 1 1 10`;
 do
 
-cmd="python train_baseline.py --dataset_mode=multimodal --model=impl_fusion
+cmd="python3 train_baseline.py --dataset_mode=multimodal --model=impl_fusion
 --gpu_ids=$gpu --trn_modality=A --test_modality=A 
 --weight_a=1.0 --weight_v=0.0 --weight_l=0.5 --embd_size=128
 --log_dir=./logs --checkpoints_dir=./checkpoints --print_freq=10 
