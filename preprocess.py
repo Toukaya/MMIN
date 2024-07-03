@@ -18,16 +18,6 @@ from sklearn.metrics import accuracy_score, f1_score
 
 import config
 
-
-def split_audio_from_video_16k(video_root, save_root):
-    if not os.path.exists(save_root): os.makedirs(save_root)
-    for video_path in tqdm.tqdm(glob.glob(video_root + '/*')):
-        videoname = os.path.basename(video_path)[:-4]
-        audio_path = os.path.join(save_root, videoname + '.wav')
-        cmd = "%s -loglevel quiet -y -i %s -ar 16000 -ac 1 %s" % (config.PATH_TO_FFMPEG, video_path, audio_path)
-        os.system(cmd)
-
-
 # t: ms
 def convert_time(t):
     t = int(t)
@@ -37,89 +27,6 @@ def convert_time(t):
     m = math.floor((t - h * 3600) / 60)
     s = t - 3600 * h - 60 * m
     return '%02d:%02d:%02d.%03d' % (h, m, s, ms)
-
-
-######################################################
-######################################################
-## split video according to start and end
-def split_video_by_start_end_IEMOCAP():
-    data_root = '../emotion-data/IEMOCAP'
-    save_root1 = 'dataset/IEMOCAP/video'
-    save_root2 = 'dataset/IEMOCAP/subvideo'
-    ffmpeg_path = config.PATH_TO_FFMPEG
-    if not os.path.exists(save_root1): os.makedirs(save_root1)
-    if not os.path.exists(save_root2): os.makedirs(save_root2)
-
-    error_lines = []
-    for session_name in ['Session1', 'Session2', 'Session3', 'Session4', 'Session5']:
-        avi_root = os.path.join(data_root, session_name, 'dialog/avi/DivX')
-        transcription_root = os.path.join(data_root, session_name, 'dialog/transcriptions')
-
-        for trans_path in glob.glob(transcription_root + '/S*.txt'):
-            # trans_path = f'{data_root}/Session1/dialog/transcriptions/Ses01F_impro01.txt'
-            trans_name = os.path.basename(trans_path)[:-4]
-            avi_path = os.path.join(avi_root, trans_name + '.avi')
-            mp4_path = os.path.join(save_root1, trans_name + '.mp4')
-            ## change avi to mp4
-            cmd = f'{ffmpeg_path} -i "{avi_path}" "{mp4_path}"'
-            os.system(cmd)
-
-            ## read lines
-            with open(trans_path, encoding='utf8') as f:
-                lines = [line.strip() for line in f]
-            lines = [line for line in lines if len(line) != 0]
-            for line in lines:  # line: Ses05F_script03_1_F033 [241.6700-243.4048]: You knew there was nothing.
-                try:  # some line cannot be processed
-                    subname = line.split(' [')[0]
-                    subvideo_path = os.path.join(save_root2, subname + '.mp4')
-
-                    start = line.split('[')[1].split('-')[0]
-                    end = line.split('-')[1].split(']')[0]
-                    start = convert_time(float(start) * 1000)
-                    end = convert_time(float(end) * 1000)
-
-                    cmd = f'{ffmpeg_path} -ss {start} -to {end} -accurate_seek -i "{mp4_path}" -vcodec copy -acodec copy "{subvideo_path}" -y'
-                    os.system(cmd)
-                except:
-                    error_lines.append(line)
-                    continue
-
-    print(error_lines)
-
-
-def split_video_by_start_end_CMUMOSEI():
-    ## video number 3837
-    data_root = '../emotion-data/CMUMOSEI'
-    trans_root = os.path.join(data_root, 'Transcript/Segmented/Combined')  # 3837 samples
-    video_root = os.path.join(data_root, 'Videos/Full/Combined')  # 3837 samples
-    save_root = os.path.join(data_root, 'whole_video')
-    ffmpeg_path = config.PATH_TO_FFMPEG
-
-    if not os.path.exists(save_root): os.makedirs(save_root)
-    video_paths = glob.glob(video_root + '/*')
-    for ii, video_path in enumerate(video_paths):
-        print(f'{ii + 1}/{len(video_paths)}  {video_path}')
-
-        video_name = os.path.basename(video_path)[:-4]
-        trans_path = os.path.join(trans_root, video_name + '.txt')
-        assert os.path.exists(trans_path), f'{trans_path} not exists!!'
-
-        ## read lines
-        with open(trans_path, encoding='utf8') as f:
-            lines = [line.strip() for line in f]
-        lines = [line for line in lines if len(line) != 0]
-        for ii, line in enumerate(lines):
-            name1, name2, start, end, sentence = line.split('___', 4)
-            name = f'{name1}_{name2}'
-            subvideo_path = os.path.join(save_root, name + '.mp4')
-            if os.path.exists(subvideo_path): continue
-
-            start = convert_time(float(start) * 1000)
-            end = convert_time(float(end) * 1000)
-
-            cmd = f'{ffmpeg_path} -nostats -loglevel 0 -ss {start} -to {end} -accurate_seek -i "{video_path}" -vcodec copy -acodec copy "{subvideo_path}" -y'
-            os.system(cmd)
-
 
 def select_videos_for_cmumosei():
     data_root = '../emotion-data/CMUMOSEI'
