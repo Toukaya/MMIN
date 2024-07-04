@@ -2,10 +2,9 @@ from __future__ import print_function
 from __future__ import division
 
 import tensorflow as tf
-import framework.model.trntst
+from framework.model.trntst import TrnTst
 
-
-def TrnTst(framework.model.trntst.TrnTst):
+def TrnTstFunction(TrnTst):
 
   def _construct_feed_dict_in_trn(self, data):
     raise NotImplementedError("""please customize construct_feed_dict_in_trn""")

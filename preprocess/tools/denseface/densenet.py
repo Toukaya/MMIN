@@ -111,7 +111,7 @@ class DenseNetProto(framework.model.proto.ModelProto):
   def build_inference_graph_in_trn_tst(self, basegraph):
     with basegraph.as_default():
       with tf.variable_scope(self.name_scope):
-        arg_scope = self.densenet_arg_scope(self.is_training):
+        arg_scope = self.densenet_arg_scope(self.is_training)
         with slim.arg_scope(arg_scope):
           # first: initial 3x3 conv to first_output_features
           # 32x32
