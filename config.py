@@ -2,14 +2,26 @@
 import os
 import socket
 
-## gain linux ip
 def get_host_ip():
+    """
+    获取本地主机IP地址的函数
+    使用socket创建UDP套接字并连接到指定的IP和端口，然后获取套接字的本地地址
+    """
+
     try:
-        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        s.connect(('10.0.0.1',8080))
-        ip= s.getsockname()[0]
+        # 创建一个IPv4类型的UDP套接字
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        # 连接到指定的IP（10.0.0.1）和端口（8080），此操作不会发送数据，仅用于获取本地IP
+        s.connect(('10.0.0.1', 8080))
+
+        # 获取套接字的本地地址信息，其中[0]代表IP地址
+        ip = s.getsockname()[0]
     finally:
+        # 关闭套接字
         s.close()
+
+    # 返回获取到的IP地址
     return ip
 
 ############ For LINUX ##############

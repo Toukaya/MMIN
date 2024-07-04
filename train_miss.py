@@ -14,57 +14,82 @@ import config
 
 
 def make_path(path):
+    # 检查path指定的路径是否存在
     if not os.path.exists(path):
+        # 如果路径不存在，则使用os.makedirs创建该路径（包括所有必要的父目录）
         os.makedirs(path)
 
 
-## print each missing cases results
+# 定义一个评估函数eval，接收参数：优化器选项（opt），模型（model）和数据集（dataset）
 def eval(opt, model, dataset):
+    # 将模型设置为评估模式
     model.eval()
 
+    # 初始化空列表以存储结果
     total_name = []
     total_pred = []
     total_label = []
     total_recon = []
     total_hidden = []
-    for ii, data in enumerate(dataset):  # inner loop within one epoch
-        model.set_input(data)  # unpack data from dataset and apply preprocessing
+
+    # 遍历数据集中的每个样本
+    for ii, data in enumerate(dataset):
+        # 设置模型输入并进行预处理
+        model.set_input(data)
+
+        # 运行模型测试
         model.test()
 
+        # 获取预测值、重构损失、隐藏层状态
         pred = model.pred.detach().cpu().numpy()
         loss_recon = model.loss_recon.detach().cpu().numpy()
         hiddens = model.hiddens.detach().cpu().numpy()
         name = data['int2name']
         label = data['label']
 
+        # 将结果添加到对应的列表中
         total_name.append(name)
         total_pred.append(pred)
         total_label.append(label)
         total_recon.append(loss_recon)
         total_hidden.append(hiddens)
 
+    # 将列表转换为numpy数组
     total_name = np.concatenate(total_name)  # [sample_num, ]
     total_pred = np.concatenate(total_pred)  # [sample_num, num_classes]
     total_label = np.concatenate(total_label)  # [sample_num, ]
     total_hidden = np.concatenate(total_hidden)  # [sample_num, featdim]
+    # 计算重构损失的平均值
     total_recon = np.sum(total_recon) / len(total_pred)  # [1]
+
+    # 将模型恢复为训练模式
     model.train()
 
+    # 根据数据集类型计算准确率和F1分数
     dataset = opt.dataset_mode.split('_')[0]
     if dataset in ['cmumosi', 'cmumosei']:
-        non_zeros = np.array([i for i, e in enumerate(total_label) if e != 0])  # remove 0, and remove mask
+        # 对非零标签进行操作，移除0和mask
+        non_zeros = np.array([i for i, e in enumerate(total_label) if e != 0])
         acc = accuracy_score((total_label[non_zeros] > 0), (total_pred[non_zeros] > 0))
         f1 = f1_score((total_label[non_zeros] > 0), (total_pred[non_zeros] > 0), average='weighted')
     elif dataset in ['iemocapfour', 'iemocapsix']:
         acc = accuracy_score(total_label, np.argmax(total_pred, 1))
         f1 = f1_score(total_label, np.argmax(total_pred, 1), average='weighted')
+
+    # 返回F1分数、准确率、重构损失及所有标签、预测、隐藏层状态和名称
     return f1, acc, total_recon, [total_label, total_pred, total_hidden, total_name]
 
 
+# 定义一个清理检查点文件的函数，根据给定的实验名称和存储周期
 def clean_chekpoints(expr_name, store_epoch):
+    # 设置根目录为'checkpoints'文件夹下以expr_name命名的子目录
     root = os.path.join('checkpoints', expr_name)
+
+    # 遍历该目录下的所有文件
     for checkpoint in os.listdir(root):
+        # 检查文件名是否不符合指定的存储周期格式（不以store_epoch开头且以'.pth'结尾）
         if not checkpoint.startswith(str(store_epoch) + '_') and checkpoint.endswith('pth'):
+            # 如果不符合，删除该文件
             os.remove(os.path.join(root, checkpoint))
 
 
